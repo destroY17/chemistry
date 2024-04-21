@@ -1,74 +1,33 @@
-using System.Linq.Expressions;
-using System.Reflection.Metadata.Ecma335;
 using System.Text.RegularExpressions;
 
 namespace Chemistry;
 
-public class FragmentParser 
+public partial class FormulaParser
 {
-private readonly string elementWithCount;
-    public FragmentParser(string elementWithCount) 
-    {
-        this.elementWithCount = elementWithCount;
-    }
-    
-    public string Parse() 
-    {  
-        return $"{ReadElement()}:{ReadCount()}";
-    }
+    [GeneratedRegex(@"([A-Z][a-z]*)(\d*)|\(([^()]*)\)(\d*)")]
+    private static partial Regex FormulaFragmentRegex();
 
-    private string ReadElement()
-    {
-        return elementWithCount.Substring(0, ElementLength());
-    }
+    private readonly string _chemistryFormula;
 
-    private string ReadCount()
-    {
-        return ElementLength() < elementWithCount.Length ? elementWithCount.Substring(ElementLength()) : "1";
-    }
+    public static string Parse(string formula) => new FormulaParser(formula).Parse();
 
-    private int ElementLength()
-    {
-        int result = 0;
-        while (result < elementWithCount.Length)
-        {
-            if (char.IsDigit(elementWithCount[result]))
-            {
-                break;
-            }
-            result++;
-        }
+    private FormulaParser(string chemistryFormula) => _chemistryFormula = chemistryFormula;
 
-        return result;
-    }    
-}
-public class FormulaParser 
-{
-    public static string Parse(string formula)
+    private string Parse() => new Formula(GetChemicalFragments(_chemistryFormula)).ToString();
+
+    private IEnumerable<FormulaFragment> GetChemicalFragments(string chemistryFormula)
     {
-        return new FormulaParser(formula).Parse();
+        var chemicalFragments = FormulaFragmentRegex().Matches(chemistryFormula)
+            .Select(match => match.Value)
+            .SelectMany(FormulaFragmentParser.GetFragmentsFromString);
+        
+        return MergeFragmentsWithSameElements(chemicalFragments);
     }
 
-    private readonly string formula;
-    private FormulaParser(string formula) 
+    private IEnumerable<FormulaFragment> MergeFragmentsWithSameElements(IEnumerable<FormulaFragment> chemicalFragments)
     {
-        this.formula = formula;
-    }
-    
-    private string Parse() 
-    {  
-        var fragments = GetFragments();
-
-        return string.Join(',', fragments
-        .Select(fragment => new FragmentParser(fragment).Parse())
-        .Order());
-    }
-
-    private IEnumerable<string> GetFragments() 
-    {
-        return new Regex(@"([A-Z][a-z]*\d*)").Matches(formula)
-                        .Cast<Match>()
-                        .Select(match => match.Value)
-                        .ToArray();
+        return chemicalFragments
+            .GroupBy(fragment => fragment.ChemicalElement)
+            .Select(group => new FormulaFragment(group.Key, group.Sum(fragment => fragment.Count)));
     }
 }
